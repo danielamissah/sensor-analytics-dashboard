@@ -18,6 +18,14 @@ from plotly.subplots import make_subplots
 from datetime import datetime, timedelta, timezone
 
 from src.ingestion.fetch_data import load_data, run_ingestion, fetch_direct
+
+@st.cache_data(ttl=3600)
+def get_cached_data():
+    """Fetch and cache sensor data for 1 hour."""
+    df = fetch_direct(past_hours=72)
+    if df.empty:
+        df = run_ingestion()
+    return df
 from src.queries.analytics import (
     QUERIES, PANDAS_QUERIES, run_query,
     latest_reading_per_city, temperature_extremes,
@@ -77,10 +85,8 @@ with st.sidebar:
     st.divider()
 
     if st.button("🔄 Refresh Data", use_container_width=True, type="primary"):
-        with st.spinner("Fetching live data..."):
-            st.session_state["data"] = run_ingestion()
-            st.session_state["last_refresh"] = datetime.now()
-        st.success("Data refreshed!")
+        st.cache_data.clear()
+        st.rerun()
 
     if "last_refresh" in st.session_state:
         st.caption(f"Last refresh: {st.session_state['last_refresh'].strftime('%H:%M:%S')}")
@@ -90,27 +96,21 @@ with st.sidebar:
     # Filters
     st.subheader("Filters")
 
-    # Load data — fetch directly from Open-Meteo on first load
-    if "data" not in st.session_state or st.session_state.get("data", pd.DataFrame()).empty:
-        with st.spinner("Fetching live sensor data from Open-Meteo API..."):
-            try:
-                df_loaded = fetch_direct(past_hours=72)
-                if df_loaded.empty:
-                    df_loaded = run_ingestion()
-                st.session_state["data"] = df_loaded
-                st.session_state["last_refresh"] = datetime.now()
-            except Exception as e:
-                st.error(f"Fetch failed: {e}")
-                import traceback
-                st.code(traceback.format_exc())
-                st.stop()
-
-    df_full = st.session_state["data"]
+    # Load data using Streamlit cache (1 hour TTL)
+    with st.spinner("Fetching live sensor data from Open-Meteo API..."):
+        try:
+            df_full = get_cached_data()
+            st.session_state["last_refresh"] = datetime.now()
+        except Exception as e:
+            st.error(f"Fetch failed: {e}")
+            import traceback
+            st.code(traceback.format_exc())
+            st.stop()
 
     if df_full.empty:
         st.error("Open-Meteo returned no data.")
         if st.button("Retry"):
-            del st.session_state["data"]
+            st.cache_data.clear()
             st.rerun()
         st.stop()
 
