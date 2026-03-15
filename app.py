@@ -293,13 +293,16 @@ with tab5:
             use_container_width=True)
     with c2:
         st.markdown("**Excel Report**")
-        exp = df.copy()
-        exp["timestamp"] = exp["timestamp"].dt.tz_localize(None)
+        def strip_tz(df):
+            d = df.copy()
+            for col in d.select_dtypes(include=["datetimetz"]).columns:
+                d[col] = d[col].dt.tz_localize(None)
+            return d
         buf = io.BytesIO()
         with pd.ExcelWriter(buf, engine="openpyxl") as w:
-            exp.head(500).to_excel(w, sheet_name="Raw", index=False)
-            daily_agg.to_excel(w, sheet_name="Daily", index=False)
-            latest.to_excel(w, sheet_name="Rankings", index=False)
+            strip_tz(df.head(500)).to_excel(w, sheet_name="Raw", index=False)
+            strip_tz(daily_agg).to_excel(w, sheet_name="Daily", index=False)
+            strip_tz(latest).to_excel(w, sheet_name="Rankings", index=False)
         st.download_button("📊 Download Excel", buf.getvalue(),
             f"analytics_{datetime.now().strftime('%Y%m%d')}.xlsx",
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
