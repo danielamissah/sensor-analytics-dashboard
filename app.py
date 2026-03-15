@@ -30,7 +30,7 @@ from src.export.exporter import to_csv, to_excel, export_filename
 # ── Page config ────────────────────────────────────────────────────────────
 st.set_page_config(
     page_title  = "Live Sensor Analytics",
-    page_icon   = "",
+    page_icon   = "🌡️",
     layout      = "wide",
     initial_sidebar_state = "expanded",
 )
@@ -90,15 +90,16 @@ with st.sidebar:
     # Filters
     st.subheader("Filters")
 
-    # Load data
-    if "data" not in st.session_state:
-        with st.spinner("Loading sensor data..."):
-            st.session_state["data"] = load_data()
+    # Load data — always fetch live on first load
+    if "data" not in st.session_state or st.session_state.get("data", pd.DataFrame()).empty:
+        with st.spinner("Fetching live sensor data from Open-Meteo API..."):
+            st.session_state["data"] = run_ingestion()
+            st.session_state["last_refresh"] = datetime.now()
 
     df_full = st.session_state["data"]
 
     if df_full.empty:
-        st.error("No data available. Click Refresh Data.")
+        st.error("Could not fetch data from Open-Meteo API. Please try refreshing.")
         st.stop()
 
     cities        = sorted(df_full["city"].unique().tolist())

@@ -143,24 +143,9 @@ def load_data(config_path: str = "configs/config.yaml") -> pd.DataFrame:
     except Exception as e:
         logger.warning(f"DB unavailable: {e}")
 
-    # Try cached CSV
-    try:
-        df = pd.read_csv("outputs/sensor_readings.csv", parse_dates=["timestamp"])
-        if len(df) > 0:
-            logger.info(f"Loaded {len(df)} rows from CSV cache")
-            return df
-    except Exception:
-        pass
-
     # Fetch live from API (always works — no DB needed)
     logger.info("Fetching live data from Open-Meteo API...")
-    df = fetch_all(cfg)
-    if not df.empty:
-        try:
-            save_to_csv(df)
-        except Exception:
-            pass
-    return df
+    return fetch_all(cfg)
 
 
 if __name__ == "__main__":
