@@ -138,7 +138,7 @@ if df_full.empty:
 if is_live:
     st.success("🟢 Live data from Open-Meteo Archive API")
 else:
-    st.info("📊 Showing sample data — archive API temporarily unavailable.")
+    st.info("Showing sample data — archive API temporarily unavailable.")
 
 # Filter
 cutoff = datetime.now(timezone.utc) - timedelta(hours=hours_back)
@@ -152,7 +152,7 @@ if df.empty:
     st.stop()
 
 # ── Header ─────────────────────────────────────────────────────────────────
-st.title("🌡️ Live Sensor Analytics Dashboard")
+st.title("Live Sensor Analytics Dashboard")
 st.caption(f"Weather analytics · {len(selected_cities)} cities · {len(df):,} readings · Last {hours_back}h")
 
 # ── KPI cards ───────────────────────────────────────────────────────────────
@@ -161,15 +161,15 @@ cols   = st.columns(len(latest))
 for i, (_, row) in enumerate(latest.iterrows()):
     with cols[i]:
         st.metric(
-            label=f"🏙️ {row['city']}",
+            label=f"{row['city']}",
             value=f"{row['temperature_2m']:.1f}°C",
-            delta=f"💧{row['relative_humidity_2m']:.0f}%",
+            delta=f"{row['relative_humidity_2m']:.0f}%",
         )
 st.divider()
 
 # ── Tabs ──────────────────────────────────────────────────────────────────
 tab1, tab2, tab3, tab4, tab5 = st.tabs([
-    "📈 Trends", "🏆 Rankings", "⚠️ Anomalies", "📊 Correlations", "📥 Export"
+    "Trends", "Rankings", "Anomalies", "Correlations", "Export"
 ])
 
 with tab1:
@@ -288,7 +288,7 @@ with tab5:
     with c1:
         st.markdown("**CSV Export**")
         csv = df.to_csv(index=False).encode("utf-8")
-        st.download_button("📥 Download CSV", csv,
+        st.download_button("Download CSV", csv,
             f"sensor_{datetime.now().strftime('%Y%m%d')}.csv", "text/csv",
             use_container_width=True)
     with c2:
