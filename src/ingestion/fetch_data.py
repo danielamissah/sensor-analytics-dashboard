@@ -108,7 +108,7 @@ def save_to_csv(df: pd.DataFrame, path: str = "outputs/sensor_readings.csv"):
 
 
 def run_ingestion(config_path: str = "configs/config.yaml") -> pd.DataFrame:
-    """Main ingestion — called by Streamlit app and scheduler."""
+    """Main ingestion — fetches live data, saves to DB or CSV."""
     cfg = load_config(config_path)
     df  = fetch_all(cfg)
 
@@ -116,33 +116,51 @@ def run_ingestion(config_path: str = "configs/config.yaml") -> pd.DataFrame:
         logger.error("No data fetched")
         return df
 
+    # Try DB, fall back to CSV silently
     try:
         save_to_db(df, cfg)
-    except Exception as e:
-        logger.warning(f"DB save failed: {e}. Saving to CSV.")
-        save_to_csv(df)
+    except Exception:
+        try:
+            save_to_csv(df)
+        except Exception:
+            pass  # On Streamlit Cloud, just return the df in memory
 
     return df
 
 
 def load_data(config_path: str = "configs/config.yaml") -> pd.DataFrame:
-    """Load sensor data — from DB if available, else CSV fallback."""
+    """Load sensor data — from DB if available, else fetch live from API."""
     cfg = load_config(config_path)
+
+    # Try DB first
     try:
         engine = create_engine(cfg["database"]["url"])
         df = pd.read_sql(f"SELECT * FROM {cfg['database']['table']}", engine)
         df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True)
-        logger.info(f"Loaded {len(df)} rows from DB")
-        return df
-    except Exception as e:
-        logger.warning(f"DB load failed: {e}. Loading from CSV.")
-        try:
-            df = pd.read_csv("outputs/sensor_readings.csv", parse_dates=["timestamp"])
-            logger.info(f"Loaded {len(df)} rows from CSV")
+        if len(df) > 0:
+            logger.info(f"Loaded {len(df)} rows from DB")
             return df
+    except Exception as e:
+        logger.warning(f"DB unavailable: {e}")
+
+    # Try cached CSV
+    try:
+        df = pd.read_csv("outputs/sensor_readings.csv", parse_dates=["timestamp"])
+        if len(df) > 0:
+            logger.info(f"Loaded {len(df)} rows from CSV cache")
+            return df
+    except Exception:
+        pass
+
+    # Fetch live from API (always works — no DB needed)
+    logger.info("Fetching live data from Open-Meteo API...")
+    df = fetch_all(cfg)
+    if not df.empty:
+        try:
+            save_to_csv(df)
         except Exception:
-            logger.info("No cached data — fetching live")
-            return run_ingestion(config_path)
+            pass
+    return df
 
 
 if __name__ == "__main__":
