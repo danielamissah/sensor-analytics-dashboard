@@ -17,7 +17,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from datetime import datetime, timedelta, timezone
 
-from src.ingestion.fetch_data import load_data, run_ingestion
+from src.ingestion.fetch_data import load_data, run_ingestion, fetch_direct
 from src.queries.analytics import (
     QUERIES, PANDAS_QUERIES, run_query,
     latest_reading_per_city, temperature_extremes,
@@ -90,20 +90,25 @@ with st.sidebar:
     # Filters
     st.subheader("Filters")
 
-    # Load data — always fetch live on first load
+    # Load data — fetch directly from Open-Meteo on first load
     if "data" not in st.session_state or st.session_state.get("data", pd.DataFrame()).empty:
         with st.spinner("Fetching live sensor data from Open-Meteo API..."):
             try:
-                st.session_state["data"] = run_ingestion()
+                df_loaded = fetch_direct(past_hours=72)
+                if df_loaded.empty:
+                    df_loaded = run_ingestion()
+                st.session_state["data"] = df_loaded
                 st.session_state["last_refresh"] = datetime.now()
             except Exception as e:
                 st.error(f"Fetch failed: {e}")
+                import traceback
+                st.code(traceback.format_exc())
                 st.stop()
 
     df_full = st.session_state["data"]
 
     if df_full.empty:
-        st.error("Open-Meteo returned no data. Please try refreshing.")
+        st.error("Open-Meteo returned no data.")
         if st.button("Retry"):
             del st.session_state["data"]
             st.rerun()
@@ -384,7 +389,7 @@ with tab5:
 
     # Download this query result
     st.download_button(
-        label     = "Download CSV",
+        label     = "📥 Download CSV",
         data      = to_csv(result_df),
         file_name = export_filename(f"query_{selected_name}", "csv"),
         mime      = "text/csv",
@@ -420,7 +425,7 @@ with tab6:
                 "Correlations":       temperature_correlation(df),
             })
         st.download_button(
-            label     = "Download Excel Report",
+            label     = "📊 Download Excel Report",
             data      = excel_data,
             file_name = export_filename("sensor_analytics_report", "xlsx"),
             mime      = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

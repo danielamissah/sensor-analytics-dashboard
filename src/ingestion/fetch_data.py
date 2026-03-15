@@ -16,6 +16,11 @@ from sqlalchemy import create_engine, text
 
 
 def load_config(path="configs/config.yaml"):
+    # Try relative path first, then absolute from file location
+    import os
+    if not os.path.exists(path):
+        base = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+        path = os.path.join(base, "configs/config.yaml")
     with open(path) as f:
         return yaml.safe_load(f)
 
@@ -107,25 +112,52 @@ def save_to_csv(df: pd.DataFrame, path: str = "outputs/sensor_readings.csv"):
     logger.info(f"Saved {len(df)} rows to {path}")
 
 
+# Hardcoded config for Streamlit Cloud (no filesystem dependency)
+DEFAULT_LOCATIONS = [
+    {"name": "Munich",    "latitude": 48.1351, "longitude": 11.5820, "country": "Germany"},
+    {"name": "Berlin",    "latitude": 52.5200, "longitude": 13.4050, "country": "Germany"},
+    {"name": "Hamburg",   "latitude": 53.5511, "longitude":  9.9937, "country": "Germany"},
+    {"name": "Frankfurt", "latitude": 50.1109, "longitude":  8.6821, "country": "Germany"},
+    {"name": "London",    "latitude": 51.5074, "longitude": -0.1278, "country": "UK"},
+    {"name": "Paris",     "latitude": 48.8566, "longitude":  2.3522, "country": "France"},
+]
+DEFAULT_VARIABLES = [
+    "temperature_2m", "relative_humidity_2m", "dew_point_2m",
+    "apparent_temperature", "surface_pressure", "wind_speed_10m",
+    "wind_direction_10m", "precipitation", "weather_code",
+]
+
+
+def fetch_direct(past_hours: int = 72) -> pd.DataFrame:
+    """Fetch live data without config file — works on Streamlit Cloud."""
+    dfs = []
+    for location in DEFAULT_LOCATIONS:
+        df = fetch_city(location, DEFAULT_VARIABLES, past_hours)
+        if not df.empty:
+            dfs.append(df)
+        time.sleep(0.3)
+    if not dfs:
+        return pd.DataFrame()
+    return pd.concat(dfs, ignore_index=True)
+
+
 def run_ingestion(config_path: str = "configs/config.yaml") -> pd.DataFrame:
-    """Main ingestion — fetches live data, saves to DB or CSV."""
-    cfg = load_config(config_path)
-    df  = fetch_all(cfg)
-
-    if df.empty:
-        logger.error("No data fetched")
-        return df
-
-    # Try DB, fall back to CSV silently
+    """Main ingestion — fetches live data, works with or without config/DB."""
+    # Try config-based fetch first
     try:
-        save_to_db(df, cfg)
-    except Exception:
-        try:
-            save_to_csv(df)
-        except Exception:
-            pass  # On Streamlit Cloud, just return the df in memory
+        cfg = load_config(config_path)
+        df  = fetch_all(cfg)
+        if not df.empty:
+            try:
+                save_to_db(df, cfg)
+            except Exception:
+                pass
+            return df
+    except Exception as e:
+        logger.warning(f"Config-based fetch failed: {e}. Using direct fetch.")
 
-    return df
+    # Direct fetch — no config needed
+    return fetch_direct()
 
 
 def load_data(config_path: str = "configs/config.yaml") -> pd.DataFrame:
