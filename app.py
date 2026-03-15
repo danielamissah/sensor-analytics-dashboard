@@ -53,12 +53,11 @@ def fetch_all_cities(past_hours: int = 72) -> pd.DataFrame:
             resp = requests.get(
                 "https://api.open-meteo.com/v1/forecast",
                 params={
-                    "latitude":       loc["latitude"],
-                    "longitude":      loc["longitude"],
-                    "hourly":         ",".join(VARIABLES),
-                    "past_hours":     past_hours,
-                    "forecast_hours": 0,
-                    "timezone":       "UTC",
+                    "latitude":    loc["latitude"],
+                    "longitude":   loc["longitude"],
+                    "hourly":      ",".join(VARIABLES),
+                    "forecast_days": 3,
+                    "timezone":    "UTC",
                 },
                 timeout=30,
             )
@@ -77,7 +76,7 @@ def fetch_all_cities(past_hours: int = 72) -> pd.DataFrame:
                 rows.append(row)
             dfs.append(pd.DataFrame(rows))
         except Exception as e:
-            st.warning(f"Failed to fetch {loc['name']}: {e}")
+            st.error(f"Failed to fetch {loc['name']}: {type(e).__name__}: {e}")
 
     if not dfs:
         return pd.DataFrame()
