@@ -37,58 +37,47 @@ CITY_COLORS = {
 }
 
 # Tomorrow.io fields to fetch
-FIELDS = [
-    "temperature", "humidity", "dewPoint", "apparentTemperature",
-    "pressureSurfaceLevel", "windSpeed", "windDirection", "precipitationIntensity",
+ARCHIVE_VARIABLES = [
+    "temperature_2m", "relative_humidity_2m", "dew_point_2m",
+    "apparent_temperature", "surface_pressure", "wind_speed_10m",
+    "wind_direction_10m", "precipitation",
 ]
 
-FIELD_MAP = {
-    "temperature":           "temperature_2m",
-    "humidity":              "relative_humidity_2m",
-    "dewPoint":              "dew_point_2m",
-    "apparentTemperature":   "apparent_temperature",
-    "pressureSurfaceLevel":  "surface_pressure",
-    "windSpeed":             "wind_speed_10m",
-    "windDirection":         "wind_direction_10m",
-    "precipitationIntensity":"precipitation",
-}
 
-
-def fetch_city_tomorrow(loc: dict, api_key: str, hours: int = 72) -> pd.DataFrame:
-    """Fetch hourly data for one city from Tomorrow.io."""
+def fetch_city_archive(loc: dict, days: int = 3) -> pd.DataFrame:
+    """Fetch historical hourly data from Open-Meteo Archive API (no auth, separate rate limit)."""
     try:
-        url = "https://api.tomorrow.io/v4/timelines"
-        params = {
-            "location":  f"{loc['latitude']},{loc['longitude']}",
-            "fields":    ",".join(FIELDS),
-            "units":     "metric",
-            "timestep":  "1h",
-            "startTime": (datetime.now(timezone.utc) - timedelta(hours=hours)).strftime("%Y-%m-%dT%H:%M:%SZ"),
-            "endTime":   datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-            "apikey":    api_key,
-        }
-        resp = requests.get(url, params=params, timeout=30)
+        end_date   = datetime.now(timezone.utc).date()
+        start_date = end_date - timedelta(days=days)
+        resp = requests.get(
+            "https://archive-api.open-meteo.com/v1/archive",
+            params={
+                "latitude":  loc["latitude"],
+                "longitude": loc["longitude"],
+                "start_date": start_date.isoformat(),
+                "end_date":   end_date.isoformat(),
+                "hourly":     ",".join(ARCHIVE_VARIABLES),
+                "timezone":   "UTC",
+            },
+            headers={"User-Agent": "SensorDashboard/1.0"},
+            timeout=30,
+        )
         resp.raise_for_status()
-        data     = resp.json()
-        timeline = data["data"]["timelines"][0]["intervals"]
-
+        hourly = resp.json().get("hourly", {})
+        times  = hourly.get("time", [])
+        if not times:
+            return pd.DataFrame()
         rows = []
-        for interval in timeline:
-            row = {
-                "city":      loc["name"],
-                "country":   loc["country"],
-                "timestamp": interval["startTime"],
-            }
-            values = interval.get("values", {})
-            for api_field, col_name in FIELD_MAP.items():
-                row[col_name] = values.get(api_field)
+        for i, ts in enumerate(times):
+            row = {"city": loc["name"], "country": loc["country"], "timestamp": ts}
+            for var in ARCHIVE_VARIABLES:
+                vals = hourly.get(var, [])
+                row[var] = vals[i] if i < len(vals) else None
             rows.append(row)
-
         df = pd.DataFrame(rows)
         df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True)
         return df
-
-    except Exception as e:
+    except Exception:
         return pd.DataFrame()
 
 
@@ -106,17 +95,14 @@ def load_sample_data() -> pd.DataFrame:
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
-def get_data(api_key: str) -> tuple:
-    """Fetch data from Tomorrow.io — fall back to sample data if needed."""
-    if not api_key:
-        return load_sample_data(), False
-
+def get_data(_unused: str = "") -> tuple:
+    """Fetch data from Open-Meteo Archive API — no auth required."""
     dfs = []
     for loc in LOCATIONS:
-        df = fetch_city_tomorrow(loc, api_key, hours=72)
+        df = fetch_city_archive(loc, days=3)
         if not df.empty:
             dfs.append(df)
-        time.sleep(1.2)  # Tomorrow.io free tier: ~3 calls/sec
+        time.sleep(0.5)
 
     if dfs:
         return pd.concat(dfs, ignore_index=True), True
@@ -127,7 +113,7 @@ def get_data(api_key: str) -> tuple:
 # ── Sidebar ──────────────────────────────────────────────────────────────────
 with st.sidebar:
     st.title("🌡️ Sensor Analytics")
-    st.caption("Live weather data — Tomorrow.io API")
+    st.caption("Historical weather data — Open-Meteo Archive API")
     st.divider()
     if st.button("🔄 Refresh Data", use_container_width=True, type="primary"):
         st.cache_data.clear()
@@ -137,24 +123,22 @@ with st.sidebar:
     cities_all = [loc["name"] for loc in LOCATIONS]
     selected_cities = st.multiselect("Cities", cities_all, default=cities_all)
     st.divider()
-    st.caption("**Stack:** Tomorrow.io API · PostgreSQL · Streamlit · Plotly")
+    st.caption("**Stack:** Open-Meteo Archive API · PostgreSQL · Streamlit · Plotly")
     st.caption("**GitHub:** [sensor-analytics-dashboard](https://github.com/danielamissah/sensor-analytics-dashboard)")
 
 
 # ── Load data ─────────────────────────────────────────────────────────────────
-API_KEY = st.secrets.get("TOMORROW_API_KEY", os.environ.get("TOMORROW_API_KEY", ""))
-
 with st.spinner("Loading sensor data..."):
-    df_full, is_live = get_data(API_KEY)
+    df_full, is_live = get_data()
 
 if df_full.empty:
     st.error("No data available.")
     st.stop()
 
 if is_live:
-    st.success("🟢 Live data from Tomorrow.io API")
+    st.success("🟢 Live data from Open-Meteo Archive API")
 else:
-    st.info("📊 Showing sample data. Add TOMORROW_API_KEY to Streamlit secrets for live data.")
+    st.info("📊 Showing sample data — archive API temporarily unavailable.")
 
 # Filter
 cutoff = datetime.now(timezone.utc) - timedelta(hours=hours_back)
