@@ -22,10 +22,32 @@ from src.ingestion.fetch_data import load_data, run_ingestion, fetch_direct
 @st.cache_data(ttl=3600)
 def get_cached_data():
     """Fetch and cache sensor data for 1 hour."""
-    df = fetch_direct(past_hours=72)
-    if df.empty:
-        df = run_ingestion()
-    return df
+    import traceback
+    errors = []
+    
+    # Test a single city first
+    try:
+        import requests
+        resp = requests.get(
+            "https://api.open-meteo.com/v1/forecast",
+            params={
+                "latitude": 48.1351, "longitude": 11.5820,
+                "hourly": "temperature_2m",
+                "past_hours": 6, "forecast_hours": 0, "timezone": "UTC"
+            },
+            timeout=30
+        )
+        data = resp.json()
+        times = data.get("hourly", {}).get("time", [])
+        if times:
+            # Full fetch
+            return fetch_direct(past_hours=72)
+        else:
+            errors.append(f"API returned no times: {data}")
+    except Exception as e:
+        errors.append(f"Direct API test failed: {e}\n{traceback.format_exc()}")
+    
+    raise RuntimeError("\n".join(errors) or "Unknown error")
 from src.queries.analytics import (
     QUERIES, PANDAS_QUERIES, run_query,
     latest_reading_per_city, temperature_extremes,
@@ -102,9 +124,7 @@ with st.sidebar:
             df_full = get_cached_data()
             st.session_state["last_refresh"] = datetime.now()
         except Exception as e:
-            st.error(f"Fetch failed: {e}")
-            import traceback
-            st.code(traceback.format_exc())
+            st.error(f"Fetch failed: {str(e)}")
             st.stop()
 
     if df_full.empty:
