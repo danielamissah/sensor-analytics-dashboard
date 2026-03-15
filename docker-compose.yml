@@ -1,0 +1,18 @@
+services:
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_USER:     analytics
+      POSTGRES_PASSWORD: analytics
+      POSTGRES_DB:       sensor_analytics
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "analytics"]
+      interval: 10s
+      retries: 5
+
+volumes:
+  postgres_data:
