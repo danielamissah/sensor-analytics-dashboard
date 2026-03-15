@@ -93,13 +93,20 @@ with st.sidebar:
     # Load data — always fetch live on first load
     if "data" not in st.session_state or st.session_state.get("data", pd.DataFrame()).empty:
         with st.spinner("Fetching live sensor data from Open-Meteo API..."):
-            st.session_state["data"] = run_ingestion()
-            st.session_state["last_refresh"] = datetime.now()
+            try:
+                st.session_state["data"] = run_ingestion()
+                st.session_state["last_refresh"] = datetime.now()
+            except Exception as e:
+                st.error(f"Fetch failed: {e}")
+                st.stop()
 
     df_full = st.session_state["data"]
 
     if df_full.empty:
-        st.error("Could not fetch data from Open-Meteo API. Please try refreshing.")
+        st.error("Open-Meteo returned no data. Please try refreshing.")
+        if st.button("Retry"):
+            del st.session_state["data"]
+            st.rerun()
         st.stop()
 
     cities        = sorted(df_full["city"].unique().tolist())
@@ -377,7 +384,7 @@ with tab5:
 
     # Download this query result
     st.download_button(
-        label     = "📥 Download CSV",
+        label     = "Download CSV",
         data      = to_csv(result_df),
         file_name = export_filename(f"query_{selected_name}", "csv"),
         mime      = "text/csv",
@@ -413,7 +420,7 @@ with tab6:
                 "Correlations":       temperature_correlation(df),
             })
         st.download_button(
-            label     = "📊 Download Excel Report",
+            label     = "Download Excel Report",
             data      = excel_data,
             file_name = export_filename("sensor_analytics_report", "xlsx"),
             mime      = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
