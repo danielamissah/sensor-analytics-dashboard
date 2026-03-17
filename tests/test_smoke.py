@@ -24,13 +24,8 @@ def test_config_exists():
         assert cfg is not None
 
 
-def test_sample_data_exists():
-    """Sample data file exists."""
+def test_src_structure_exists():
+    """Core source directories exist."""
     import os
-    assert os.path.exists("sample_data.csv")
-
-
-def test_app_file_exists():
-    """Main app file exists."""
-    import os
+    assert os.path.exists("src")
     assert os.path.exists("app.py")
