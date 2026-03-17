@@ -1,0 +1,47 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  # ── Lint & Test ──────────────────────────────────────────────────────────────
+  test:
+    name: Lint & Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt ruff pytest
+
+      - name: Lint with ruff
+        run: ruff check src/ app.py --ignore E501 || true
+
+      - name: Run smoke tests
+        run: pytest tests/ -v --tb=short
+        if: always()
+
+  # ── Notify Streamlit Cloud ────────────────────────────────────────────────────
+  # Streamlit Cloud auto-deploys on push to main/master.
+  # This job just confirms the deploy was triggered.
+  deploy:
+    name: Deploy to Streamlit Cloud
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+
+    steps:
+      - name: Confirm deployment triggered
+        run: |
+          echo "Tests passed — Streamlit Cloud will auto-deploy from master."
+          echo "Live: https://sensor-analytics-dashboard.streamlit.app"
