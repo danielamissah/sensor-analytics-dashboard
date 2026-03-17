@@ -203,10 +203,10 @@ with st.sidebar:
 
     st.divider()
     st.caption("**Stack:** Open-Meteo Archive API · PostgreSQL · Streamlit · Plotly")
-    st.caption(
-        "**GitHub:** [sensor-analytics-dashboard]"
-        "(https://github.com/danielamissah/sensor-analytics-dashboard)"
-    )
+    # st.caption(
+    #     "**GitHub:** [sensor-analytics-dashboard]"
+    #     "(https://github.com/danielamissah/sensor-analytics-dashboard)"
+    # )
 
 
 # ── Load and filter data ──────────────────────────────────────────────────────
